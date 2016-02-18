@@ -34,6 +34,7 @@ object Requirement {
   case object TokenizeWithIPA extends TokenizeChild
   case object TokenizeWithJuman extends TokenizeChild
   case object TokenizeWithUnidic extends TokenizeChild
+  case object CoreNLP extends TokenizeChild
 
   case object Chunk extends Requirement
   case object Dependency extends Requirement // dependency between chunks

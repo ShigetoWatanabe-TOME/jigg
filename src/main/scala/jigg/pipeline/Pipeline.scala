@@ -49,6 +49,12 @@ class Pipeline(val properties: Properties = new Properties) extends PropsHolder 
   private[this] val documentIDGen = jigg.util.IDGenerator("d")
 
   val annotatorNames = annotators.split("""[,\s]+""") // PU.safeFind("annotators", props).split("""[,\s]+""")
+  val annotatorNamesSuger = {
+  		var new_annotators = annotators
+  		var pattern = """\[.+?\]""".r
+  		for(p <- pattern.findAllIn(annotators)) new_annotators = new_annotators.replace(p,p.replace(",",";").replace("[","").replace("]",""))
+  		new_annotators.split("""[,\s]+""") 
+  }
 
   val customAnnotatorNameToClassPath = PU.filter(properties) {
     case (k, _) => k.startsWith("customAnnotatorClass.")
@@ -58,8 +64,8 @@ class Pipeline(val properties: Properties = new Properties) extends PropsHolder 
 
   def createAnnotators: List[Annotator] = {
     val annotators =
-      annotatorNames.map { getAnnotator(_) }.toList
-
+      //annotatorNames.map { getAnnotator(_) }.toList
+      annotatorNamesSuger.map { getAnnotator(_) }.toList
     annotators.foldLeft(Set[Requirement]()) { (satisfiedSofar, annotator) =>
       val requires = annotator.requires
 
@@ -73,6 +79,7 @@ class Pipeline(val properties: Properties = new Properties) extends PropsHolder 
 
   /** User may override this method in a subclass to add more own annotators.
     */
+   val corenlp_op = "corenlp*".r
   protected val defaultAnnotatorClassMap: Map[String, Class[_]] = Map(
     "ssplit" -> classOf[RegexSentenceAnnotator],
     "kuromoji" -> classOf[KuromojiAnnotator],
@@ -80,7 +87,11 @@ class Pipeline(val properties: Properties = new Properties) extends PropsHolder 
     "cabocha" -> classOf[CabochaAnnotator],
     "juman" -> classOf[JumanAnnotator],
     "knp" -> classOf[KNPAnnotator],
-    "ccg" -> classOf[CCGParseAnnotator]
+    "ccg" -> classOf[CCGParseAnnotator],
+//    "chapas" -> classOf[ChaPASAnnotator],
+    "corenlp" -> classOf[StanfordCoreNLPAnnotator]
+
+
   )
 
   /** Or also customizable by overriding this method directory, e.g.,
@@ -96,26 +107,46 @@ class Pipeline(val properties: Properties = new Properties) extends PropsHolder 
     * }}}
     *
     */
-  def getAnnotator(name: String): Annotator = try {
+    def getAnnotator(name: String): Annotator = try {
+    
     getAnnotatorCompanion(name) map {
       _.fromProps(name, properties)
     } getOrElse {
       getAnnotatorClass(name) map { clazz =>
         clazz.getConstructor(classOf[String], classOf[Properties]).newInstance(name, properties).asInstanceOf[Annotator]
-      } getOrElse { argumentError("annotators", s"Failed to search for custom annotator class: $name") }
+//      } getOrElse { argumentError("annotators", s"Failed to search for custom annotator class: $name") }
+		} getOrElse {
+			getAnnotatorClassWithOption(name) map{
+				_.fromProps(name, properties)
+			}getOrElse { argumentError("annotators", s"Failed to search for custom annotator class: $name") }
+		}
+
     }
   } catch { case e: java.lang.reflect.InvocationTargetException => throw e.getCause }
-
+  
+ 
   def getAnnotatorCompanion(name: String): Option[AnnotatorCompanion[Annotator]] = {
     import scala.reflect.runtime.{currentMirror => cm}
-
     defaultAnnotatorClassMap get(name) flatMap { clazz =>
       val symbol = cm.classSymbol(clazz).companionSymbol
       try Some(cm.reflectModule(symbol.asModule).instance.asInstanceOf[AnnotatorCompanion[Annotator]])
       catch { case e: Throwable => None }
     }
   }
+  
+  
 
+  def getAnnotatorClassWithOption(str: String):Option[AnnotatorCompanion[Annotator]] = {
+    import scala.reflect.runtime.{currentMirror => cm}
+	val name = str.split(':')(0)
+	defaultAnnotatorClassMap get(name) flatMap { clazz =>
+      val symbol = cm.classSymbol(clazz).companionSymbol
+      try Some(cm.reflectModule(symbol.asModule).instance.asInstanceOf[AnnotatorCompanion[Annotator]])
+      catch { case e: Throwable => None }
+    }
+  }
+  
+  
   def getAnnotatorClass(name: String): Option[Class[_]] = {
     defaultAnnotatorClassMap get(name) orElse {
       customAnnotatorNameToClassPath get(name) map { path =>
@@ -197,7 +228,7 @@ class Pipeline(val properties: Properties = new Properties) extends PropsHolder 
     }
   }
 
-  private[this] def process[U](f: List[Annotator]=>U) = {
+  private[this] def process[U](f: List[Annotator]=>U) = {  	
     val annotators = createAnnotators
     annotators foreach { _.init }
     try f(annotators)
@@ -251,7 +282,7 @@ class Pipeline(val properties: Properties = new Properties) extends PropsHolder 
 object Pipeline {
   def main(args: Array[String]): Unit = {
     val props = jigg.util.ArgumentsParser.parse(args.toList)
-
+    
     try {
       val pipeline = new Pipeline(props)
       PU.findProperty("help", props) match {
