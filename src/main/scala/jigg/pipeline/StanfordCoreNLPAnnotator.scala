@@ -50,9 +50,9 @@ import jigg.util.XMLUtil
 
 class StanfordCoreNLPAnnotator(override val name: String, override val props: Properties) extends Annotator {
 
-	 @Prop(gloss = "Regular expression to segment lines (if omitted, specified method is used)") var pattern = ""
-  	@Prop(gloss = "Use predefined segment pattern newLine|point|pointAndNewLine") var method = "pointAndNewLine"
-  	readProps()
+  @Prop(gloss = "Regular expression to segment lines (if omitted, specified method is used)") var pattern = ""
+  @Prop(gloss = "Use predefined segment pattern newLine|point|pointAndNewLine") var method = "pointAndNewLine"
+  readProps()
 
   val splitRegex = pattern match {
     case "" =>
@@ -70,88 +70,75 @@ class StanfordCoreNLPAnnotator(override val name: String, override val props: Pr
 
 
   override def annotate(node: Node): Node = {
-	
-  	var name_option = name.split(":")
-  	if( name_option.length < 2){
-  		sf_option  = "tokenize, ssplit, pos, lemma, ner, parse, dcoref, sentiment"
-  	}else{
-  		sf_option = name_option(1).replace(";",", ")
-  	}
-	my_node = node
+    var name_option = name.split(":")
+    if( name_option.length < 2){
+      sf_option  = "tokenize, ssplit, pos, lemma, ner, parse, dcoref, sentiment"
+    }else{
+      sf_option = name_option(1).replace(";",", ")
+    }
+    my_node = node
 
-  	
-  	if( name_option.length < 2){
-  		sf_option  = "tokenize, ssplit, pos, lemma, ner, parse, dcoref, sentiment"
-  	}else{
-  		sf_option = name_option(1).replace(";",", ")
-  	}
+    if( name_option.length < 2){
+      sf_option  = "tokenize, ssplit, pos, lemma, ner, parse, dcoref, sentiment"
+    }else{
+      sf_option = name_option(1).replace(";",", ")
+    }
 
-  	
-	sf_option.split(", ")
-	for( op <- sf_option.split(", ")){
-  		var id = Operator2Id(op)
-  			
-	  	if (id < 0){
-	  		var class_name = name_option(0)
-	  		argumentError("annotators", s"Unnow opiton $op in class: $class_name")
-	  	}else{
-	  		if( id > max_option) max_option = id
-	  		if( id < min_option) min_option = id
-	  	}
-  	}
-  		
-
+    sf_option.split(", ")
+    for( op <- sf_option.split(", ")){
+      var id = Operator2Id(op)
+      if (id < 0){
+        var class_name = name_option(0)
+        argumentError("annotators", s"Unnow opiton $op in class: $class_name")
+      }else{
+        if( id > max_option) max_option = id
+        if( id < min_option) min_option = id
+      }
+    }
 
     XMLUtil.replaceAll(node, "document") { e =>
-     // val sentence_node
-	  var nlp_res = runCoreNLPAnnotation(min_option)
-	  var sf_nodes = nlp_res.get(classOf[CoreAnnotations.SentencesAnnotation])
-	  val sentences =(0 until sf_nodes.size ).sliding(1) flatMap { case Seq(x) =>
-	  	mkSentenceNode(sf_nodes.get(x))
-	  	
-	  }
-	   val textRemoved = XMLUtil.removeText(e)
-	  XMLUtil.addChild(textRemoved, <sentences>{ sentences }</sentences>)
-	  
+      // val sentence_node
+      var nlp_res = runCoreNLPAnnotation(min_option)
+      var sf_nodes = nlp_res.get(classOf[CoreAnnotations.SentencesAnnotation])
+      val sentences =(0 until sf_nodes.size ).sliding(1) flatMap { case Seq(x) =>
+        mkSentenceNode(sf_nodes.get(x))
+      }
+      val textRemoved = XMLUtil.removeText(e)
+      XMLUtil.addChild(textRemoved, <sentences>{ sentences }</sentences>)
     }
  }
 
   def mkSentenceNode(sentence_map:CoreMap): Option[Elem] ={
-  		val sentence_text = sentence_map.get(classOf[CoreAnnotations.TextAnnotation])
-  		val token_maps = sentence_map.get(classOf[CoreAnnotations.TokensAnnotation])
-  		var sid = sentenceIDGen.next
-  		if( token_maps != null){
-  			
-  			var tokens = (0 until token_maps.size).sliding(1) flatMap { case Seq(x) =>
-  				mkTokenNode(token_maps.get(x),tid(sid,x))
-  			}
-	  		
-	  		Option(<sentence id={ sid }>{ sentence_text }<tokens>{tokens}</tokens></sentence>)
-	  	}else{
-	  		//token情報なし
-	  		Option(<sentence id={ sid }>{ sentence_text }</sentence>)
-	  	}
-  
+    val sentence_text = sentence_map.get(classOf[CoreAnnotations.TextAnnotation])
+    val token_maps = sentence_map.get(classOf[CoreAnnotations.TokensAnnotation])
+    var sid = sentenceIDGen.next
+      if( token_maps != null){
+        var tokens = (0 until token_maps.size).sliding(1) flatMap { case Seq(x) =>
+          mkTokenNode(token_maps.get(x),tid(sid,x))
+        }
+        Option(<sentence id={ sid }>{ sentence_text }<tokens>{tokens}</tokens></sentence>)
+      }else{
+          //token情報なし
+        Option(<sentence id={ sid }>{ sentence_text }</sentence>)
+      }
   }
   
   def mkTokenNode(token:CoreMap,tkid:String): Option[Elem] ={
   
-  		
-  	var word = token.get(classOf[CoreAnnotations.TextAnnotation])
+    var word = token.get(classOf[CoreAnnotations.TextAnnotation])
     var lemma= token.get(classOf[CoreAnnotations.LemmaAnnotation])
-	
-	var pos =  token.get(classOf[CoreAnnotations.PartOfSpeechAnnotation])
-	var ner =  token.get(classOf[CoreAnnotations.NamedEntityTagAnnotation])
-	var Normalizedner = token.get(classOf[CoreAnnotations.NormalizedNamedEntityTagAnnotation])
-	var Speaker =token.get(classOf[CoreAnnotations.SpeakerAnnotation])
-	
 
-	Option(<token id= {tkid} word = {word}  lemma = {lemma} pos = {pos} Normalizedner = {Normalizedner} Speaker={Speaker} dummy={"dummy"} />)
- 			
+    var pos =  token.get(classOf[CoreAnnotations.PartOfSpeechAnnotation])
+    var ner =  token.get(classOf[CoreAnnotations.NamedEntityTagAnnotation])
+    var Normalizedner = token.get(classOf[CoreAnnotations.NormalizedNamedEntityTagAnnotation])
+    var Speaker =token.get(classOf[CoreAnnotations.SpeakerAnnotation])
+
+    Option(<token id= {tkid} word = {word}  lemma = {lemma} pos = {pos} Normalizedner = {Normalizedner} Speaker={Speaker} dummy={"dummy"} />)
+
 
   }
 
-   def tid(sindex: String, tindex: Int) = sindex + "_tok" + tindex
+  def tid(sindex: String, tindex: Int) = sindex + "_tok" + tindex
 
   override def requires = Set()
   override def requirementsSatisfied = Set(Requirement.CoreNLP)
@@ -161,47 +148,41 @@ class StanfordCoreNLPAnnotator(override val name: String, override val props: Pr
   var max_option:Int = -1
   var sf_option : String = ""
   
-  var  Operator2Id: (String)=> Int ={
-  		case "ssplit" => 1
-		case "tokenize" => 2
-		case "pos" | "ner" | "lemma" | "parse" | "dcoref" | "sentiment" => 3
-		case _ => -1
-  	}
+  var Operator2Id: (String)=> Int ={
+    case "ssplit" => 1
+    case "tokenize" => 2
+    case "pos" | "ner" | "lemma" | "parse" | "dcoref" | "sentiment" => 3
+    case _ => -1
+  }
   
   def runCoreNLP1: Annotation = {
-  	var text = my_node.text
+    var text = my_node.text
+
+    var sf_props = new Properties()
+    sf_props.put("annotators", sf_option)
+    var sf_pipline = new StanfordCoreNLP(sf_props)
+    var annotation= new Annotation(text)
+
+    var out_byte = new ByteArrayOutputStream
+    var out_stream =  new PrintWriter(out_byte)
+
+    sf_pipline.annotate(annotation)
   	
-  	
-  	var sf_props = new Properties()
-  	sf_props.put("annotators", sf_option)
-  	var sf_pipline = new StanfordCoreNLP(sf_props)
-  	var annotation= new Annotation(text)
-  	
-  	var out_byte = new ByteArrayOutputStream
-	var out_stream =  new PrintWriter(out_byte)
-		
-	sf_pipline.annotate(annotation)
-	
-	/*coreNLPのxml出力 ここから*/
-	sf_pipline.xmlPrint(annotation,  out_stream )
-  	println(out_byte.toString)
-  	/*coreNLPのxml出力 ここまで*/
-  	
+    /*coreNLPのxml出力 ここから*/
+    //sf_pipline.xmlPrint(annotation,  out_stream )
+    //rintln(out_byte.toString)
+    /*coreNLPのxml出力 ここまで*/
+
   	annotation
   }
   
   var runCoreNLPAnnotation: (Int)=> Annotation  = {
-  		case 1 => runCoreNLP1
-  		case 2 => runCoreNLP1
-  		case 3 => runCoreNLP1
-  	}
-  	
-
+    case 1 => runCoreNLP1
+    case 2 => runCoreNLP1
+    case 3 => runCoreNLP1
+  }
 
 }
 
-
-
 object StanfordCoreNLPAnnotator extends AnnotatorCompanion[StanfordCoreNLPAnnotator]
-
 
